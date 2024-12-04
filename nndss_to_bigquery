@@ -1,0 +1,228 @@
+import requests
+import json
+from google.cloud import bigquery
+import os
+import logging
+import time
+from requests.exceptions import RequestException
+
+os.environ["GOOGLE_CLOUD_PROJECT"] = "ba-882-group3" 
+
+# Initialize logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Initialize BigQuery client
+client = bigquery.Client()
+
+# HARDCODED API KEY, TOKEN, AND TABLE ID (for testing only)
+API_KEY = "963pfhk802fbrecx28mnnt1se"  # Replace with your actual API key
+API_TOKEN = "0YYPHjp4DLzROrWyu7oBqlHkm"  # Replace with your actual API token
+TABLE_ID = "ba-882-group3.NNDSS_Dataset.Weekly_Data" # Replace with your BigQuery table ID
+
+def fetch_nndss_data_with_retry(api_key, api_token, limit=1000, offset=0, max_retries=3):
+    for attempt in range(max_retries):
+        try:
+            return fetch_nndss_data(api_key, api_token, limit, offset)
+        except RequestException as e:
+            if attempt == max_retries - 1:
+                logger.error(f"Failed to fetch data after {max_retries} attempts: {str(e)}")
+                return None
+            logger.warning(f"Attempt {attempt + 1} failed, retrying in 5 seconds...")
+            time.sleep(5)
+
+def fetch_nndss_data(api_key, api_token, limit=1000, offset=0):
+    url = "https://data.cdc.gov/resource/x9gk-5huc.json"
+    headers = {
+        "X-App-Token": api_token,
+        "X-App-Key": api_key
+    }
+    params = {
+        "$limit": limit,
+        "$offset": offset
+    }
+    response = requests.get(url, headers=headers, params=params)
+    if response.status_code == 200:
+        return response.json()
+    else:
+        logger.error(f"Failed to fetch data: {response.status_code}")
+        logger.error(f"Response content: {response.text}")
+        return None
+
+def fetch_nndss_data_in_batches(api_key, api_token, limit=1000):
+    offset = 0
+    while True:
+        data_chunk = fetch_nndss_data(api_key, api_token, limit=limit, offset=offset)
+        if not data_chunk or len(data_chunk) == 0:
+            break
+        yield data_chunk  # Return the chunk of data
+        offset += limit
+        logger.info(f"Fetched {len(data_chunk)} records from API with offset {offset}.")
+
+
+def fetch_all_nndss_data(api_key, api_token):
+    all_data = []
+    offset = 0
+    limit = 1000  # You cannot request more than 1000 rows at a time
+
+    while True:
+        data_chunk = fetch_nndss_data_with_retry(api_key, api_token, limit, offset)
+        if not data_chunk:
+            break
+        all_data.extend(data_chunk)
+        if len(data_chunk) < limit:
+            break  # Stop if there are no more rows to fetch
+        offset += limit  # Increase the offset to fetch the next batch
+        logger.info(f"Fetched {len(all_data)} records so far...")
+
+    return all_data
+
+def process_report_data(data):
+    processed_data = []
+    for item in data:
+        year = item.get('year', '')
+        week = item.get('week', '')
+        states = item.get('states', '')
+        label = item.get('label', '')
+
+        report_id = abs(hash(f"{year}_{week}_{states}_{label}")) % (10 ** 10)
+
+        processed_item = {
+            'report_id': report_id,
+            'mmwr_year': int(year) if year.isdigit() else 0,
+            'mmwr_week': int(week) if week.isdigit() else 0,
+            'states': states,
+            'label': label
+        }
+        processed_data.append(processed_item)
+
+    return processed_data
+
+    # Process and load data into Disease Table
+
+def process_disease_data(data):
+    disease_data = []
+    for item in data:
+        disease_name = item.get('label', '')
+        disease_id = abs(hash(disease_name)) % (10 ** 10)
+        processed_item = {
+            'disease_id': disease_id,
+            'disease_name': disease_name
+        }
+        disease_data.append(processed_item)
+    return disease_data
+    
+def process_location_data(data):
+    location_data = []
+    for item in data:
+        location_name = item.get('states', '')
+        
+        # Extract geocode data
+        geocode_data = item.get('geocode', None)
+        if geocode_data and 'coordinates' in geocode_data:
+            try:
+                longitude = geocode_data['coordinates'][0]
+                latitude = geocode_data['coordinates'][1]
+            except (IndexError, KeyError):
+                longitude, latitude = None, None  # Handle missing or invalid data
+        else:
+            longitude, latitude = None, None
+
+        location_id = abs(hash(location_name)) % (10 ** 10)
+        
+        processed_item = {
+            'location_id': location_id,
+            'location_name': location_name,
+            'states': item.get('location1', ''),
+            'location2': item.get('location2', ''),
+            'longitude': longitude,
+            'latitude': latitude
+        }
+        location_data.append(processed_item)
+    
+    logger.info(f"Processed {len(location_data)} location records.")
+    return location_data
+
+
+
+# Process and load data into Weekly_Data Table
+def process_weekly_data(data, report_data, location_data, disease_data):
+    weekly_data = []
+    for item in data:
+        processed_item = {
+            'data_id': abs(hash(f"{item.get('year', '')}_{item.get('week', '')}_{item.get('states', '')}_{item.get('label', '')}")) % (10 ** 10),
+            'location_id': next((loc['location_id'] for loc in location_data if loc['location_name'] == item.get('states')), None),
+            'report_id': next((rep['report_id'] for rep in report_data if rep['mmwr_year'] == int(item.get('year', 0)) and rep['mmwr_week'] == int(item.get('week', 0))), None),
+            'disease_id': next((d['disease_id'] for d in disease_data if d['disease_name'] == item.get('label')), None),
+            'current_week': item.get('m1', 0),
+            'current_week_flag': item.get('m1_flag', ''),
+            'previous_52_week_max': item.get('m2', 0),
+            'previous_52_week_max_flag': item.get('m2_flag', ''),
+            'cumulative_ytd': item.get('m3', 0),
+            'cumulative_ytd_flag': item.get('m3_flag', ''),
+            'cumulative_ytd_previous': item.get('m4', 0),
+            'cumulative_ytd_previous_flag': item.get('m4_flag', '')
+        }
+        weekly_data.append(processed_item)
+    return weekly_data
+
+
+def load_to_bigquery(data, table_id, schema):
+    job_config = bigquery.LoadJobConfig(
+        schema=schema,
+        source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,
+        write_disposition=bigquery.WriteDisposition.WRITE_APPEND
+    )
+
+    try:
+        job = client.load_table_from_json(data, table_id, job_config=job_config)
+        job.result()  # Wait for the job to complete
+        logger.info(f"Loaded {len(data)} rows into {table_id}")
+    except Exception as e:
+        logger.error(f"Error loading data to BigQuery: {str(e)}")
+
+
+ 
+def nndss_to_bigquery(request):
+    api_key = API_KEY  # Use hardcoded API key
+    api_token = API_TOKEN  # Use hardcoded API token
+
+    logger.info("Fetching NNDSS data in batches...")
+
+    for data_chunk in fetch_nndss_data_in_batches(api_key, api_token, limit=500):
+        logger.info(f"Processing and loading a batch of {len(data_chunk)} records")
+
+        # Process Report table data
+        report_data = process_report_data(data_chunk)
+        load_to_bigquery(report_data, "ba-882-group3.NNDSS_Dataset.Report", [
+            bigquery.SchemaField("report_id", "INTEGER", mode="REQUIRED"),
+            bigquery.SchemaField("mmwr_year", "INTEGER", mode="REQUIRED"),
+            bigquery.SchemaField("mmwr_week", "INTEGER", mode="REQUIRED"),
+            bigquery.SchemaField("states", "STRING", mode="NULLABLE"),
+            bigquery.SchemaField("label", "STRING", mode="NULLABLE")
+        ])
+
+        # Process Disease table data
+        disease_data = process_disease_data(data_chunk)
+        load_to_bigquery(disease_data, "ba-882-group3.NNDSS_Dataset.Disease", [
+            bigquery.SchemaField("disease_id", "INTEGER", mode="REQUIRED"),
+            bigquery.SchemaField("disease_name", "STRING", mode="NULLABLE")
+        ])
+
+        # Process Location table data
+        location_data = process_location_data(data_chunk)
+        load_to_bigquery(location_data, "ba-882-group3.NNDSS_Dataset.Location", [
+            bigquery.SchemaField("location_id", "INTEGER", mode="REQUIRED"),
+            bigquery.SchemaField("location_name", "STRING", mode="NULLABLE"),
+            bigquery.SchemaField("states", "STRING", mode="NULLABLE"),
+            bigquery.SchemaField("location2", "STRING", mode="NULLABLE"),
+            bigquery.SchemaField("longitude", "FLOAT", mode="NULLABLE"),
+            bigquery.SchemaField("latitude", "FLOAT", mode="NULLABLE")
+        ])
+
+        # Prepare data for Weekly_Data function
+        weekly_data = process_weekly_data(data_chunk, report_data, location_data, disease_data)
+
+        # Send weekly_data to the new Cloud Run function
+        if weekly_data:
+            requests.post("https://YOUR_CLOUD_RUN_URL/weekly_data", json=weekly_data)
