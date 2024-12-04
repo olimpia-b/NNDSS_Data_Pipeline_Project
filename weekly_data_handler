@@ -1,0 +1,81 @@
+# weekly_data_function.py
+import json
+from google.cloud import bigquery
+import os
+import logging
+
+os.environ["GOOGLE_CLOUD_PROJECT"] = "ba-882-group3"
+
+# Initialize logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Initialize BigQuery client
+client = bigquery.Client()
+
+TABLE_ID = "ba-882-group3.NNDSS_Dataset.Weekly_Data"  # Replace with your BigQuery table ID
+
+def process_weekly_data(data, report_data, location_data, disease_data):
+    weekly_data = []
+    for item in data:
+        processed_item = {
+            'data_id': abs(hash(f"{item.get('year', '')}_{item.get('week', '')}_{item.get('states', '')}_{item.get('label', '')}")) % (10 ** 10),
+            'location_id': next((loc['location_id'] for loc in location_data if loc['location_name'] == item.get('states')), None),
+            'report_id': next((rep['report_id'] for rep in report_data if rep['mmwr_year'] == int(item.get('year', 0)) and rep['mmwr_week'] == int(item.get('week', 0))), None),
+            'disease_id': next((d['disease_id'] for d in disease_data if d['disease_name'] == item.get('label')), None),
+            'current_week': item.get('m1', 0),
+            'current_week_flag': item.get('m1_flag', ''),
+            'previous_52_week_max': item.get('m2', 0),
+            'previous_52_week_max_flag': item.get('m2_flag', ''),
+            'cumulative_ytd': item.get('m3', 0),
+            'cumulative_ytd_flag': item.get('m3_flag', ''),
+            'cumulative_ytd_previous': item.get('m4', 0),
+            'cumulative_ytd_previous_flag': item.get('m4_flag', '')
+        }
+        weekly_data.append(processed_item)
+    return weekly_data
+
+
+def load_to_bigquery(data, table_id, schema):
+    job_config = bigquery.LoadJobConfig(
+        schema=schema,
+        source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,
+        write_disposition=bigquery.WriteDisposition.WRITE_APPEND
+    )
+
+    try:
+        job = client.load_table_from_json(data, table_id, job_config=job_config)
+        job.result()  # Wait for the job to complete
+        logger.info(f"Loaded {len(data)} rows into {table_id}")
+    except Exception as e:
+        logger.error(f"Error loading data to BigQuery: {str(e)}")
+
+
+def weekly_data_handler(request):
+    # Log the request method and payload
+    logger.info(f"Request method: {request.method}")
+    
+    # You can log the request payload if it's not empty
+    if request.method == 'POST':
+        data = request.get_json()
+        logger.info(f"Request payload: {data}")
+        
+        # Load data into BigQuery
+        load_to_bigquery(data, TABLE_ID, [
+            bigquery.SchemaField("data_id", "INTEGER", mode="NULLABLE"),
+            bigquery.SchemaField("location_id", "INTEGER", mode="NULLABLE"),
+            bigquery.SchemaField("report_id", "INTEGER", mode="NULLABLE"),
+            bigquery.SchemaField("disease_id", "INTEGER", mode="NULLABLE"),
+            bigquery.SchemaField("current_week", "INTEGER", mode="NULLABLE"),
+            bigquery.SchemaField("current_week_flag", "STRING", mode="NULLABLE"),
+            bigquery.SchemaField("previous_52_week_max", "INTEGER", mode="NULLABLE"),
+            bigquery.SchemaField("previous_52_week_max_flag", "STRING", mode="NULLABLE"),
+            bigquery.SchemaField("cumulative_ytd", "INTEGER", mode="NULLABLE"),
+            bigquery.SchemaField("cumulative_ytd_flag", "STRING", mode="NULLABLE"),
+            bigquery.SchemaField("cumulative_ytd_previous", "INTEGER", mode="NULLABLE"),
+            bigquery.SchemaField("cumulative_ytd_previous_flag", "STRING", mode="NULLABLE")
+        ])
+        return "Data loaded successfully", 200
+    else:
+        logger.warning(f"Invalid request method: {request.method}")
+        return "Invalid request method", 405
