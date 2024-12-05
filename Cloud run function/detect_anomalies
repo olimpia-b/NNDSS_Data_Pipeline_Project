@@ -1,0 +1,50 @@
+from google.cloud import bigquery
+import logging
+
+# Initialize BigQuery client
+client = bigquery.Client()
+
+def detect_anomalies(request):
+    """
+    Cloud Function to detect anomalies in BigQuery tables and log them.
+    """
+    try:
+        # Define project, dataset, and anomaly thresholds
+        project_id = "ba-882-group3"
+        dataset_id = "NNDSS_Dataset"
+        table = "Weekly_Data"
+        threshold = 2  # Number of standard deviations for anomaly detection
+
+        # Query to calculate anomalies
+        query = f"""
+        WITH Stats AS (
+            SELECT
+                DiseaseID,
+                AVG(Cases) AS AvgCases,
+                STDDEV(Cases) AS StdDevCases
+            FROM `{project_id}.{dataset_id}.{table}`
+            GROUP BY DiseaseID
+        )
+        SELECT
+            wd.DiseaseID,
+            wd.Date,
+            wd.Cases,
+            s.AvgCases,
+            s.StdDevCases
+        FROM `{project_id}.{dataset_id}.{table}` wd
+        JOIN Stats s
+        ON wd.DiseaseID = s.DiseaseID
+        WHERE wd.Cases > s.AvgCases + {threshold} * s.StdDevCases
+        """
+        results = client.query(query).result()
+
+        anomalies = [dict(row) for row in results]
+        if anomalies:
+            logging.warning(f"Anomalies detected: {anomalies}")
+            return f"Anomalies detected: {len(anomalies)} rows", 200
+        else:
+            return "No anomalies detected.", 200
+
+    except Exception as e:
+        logging.error(f"Error detecting anomalies: {e}")
+        return f"Error: {e}", 500
