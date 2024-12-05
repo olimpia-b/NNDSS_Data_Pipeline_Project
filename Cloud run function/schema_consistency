@@ -1,0 +1,35 @@
+from google.cloud import bigquery
+import logging
+
+# Initialize BigQuery client
+client = bigquery.Client()
+
+def schema_consistency(request):
+    """
+    Cloud Function to check schema consistency for BigQuery tables.
+    """
+    try:
+        # Define project, dataset, and expected schemas
+        project_id = "ba-882-group3"
+        dataset_id = "NNDSS_Dataset"
+        expected_schemas = {
+            "Disease": [("DiseaseID", "STRING"), ("DiseaseName", "STRING")],
+            "Location": [("LocationID", "STRING"), ("State", "STRING")],
+            "Weekly_Data": [("DiseaseID", "STRING"), ("LocationID", "STRING"), ("Date", "DATE"), ("Cases", "INTEGER")]
+        }
+
+        for table, expected_schema in expected_schemas.items():
+            logging.info(f"Checking schema for table {table}")
+            table_ref = f"{project_id}.{dataset_id}.{table}"
+            table = client.get_table(table_ref)
+
+            # Compare actual schema with expected schema
+            actual_schema = [(field.name, field.field_type) for field in table.schema]
+            if actual_schema != expected_schema:
+                logging.warning(f"Schema mismatch in table {table_ref}. Expected: {expected_schema}, Found: {actual_schema}")
+
+        return "Schema consistency check completed successfully.", 200
+
+    except Exception as e:
+        logging.error(f"Error during schema consistency check: {e}")
+        return f"Error: {e}", 500
