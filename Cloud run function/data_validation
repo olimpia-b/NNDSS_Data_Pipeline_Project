@@ -1,0 +1,42 @@
+from google.cloud import bigquery
+import logging
+
+# Initialize BigQuery client
+client = bigquery.Client()
+
+def data_validation(request):
+    """
+    Cloud Function to validate data in BigQuery tables.
+    - Checks for null values in critical columns.
+    - Logs tables with issues.
+    """
+    try:
+        # Define project, dataset, and validation rules
+        project_id = "ba-882-group3"
+        dataset_id = "NNDSS_Dataset"
+        validation_rules = {
+            "Disease": ["DiseaseID", "DiseaseName"],
+            "Location": ["LocationID", "State"],
+            "Weekly_Data": ["DiseaseID", "LocationID", "Date", "Cases"]
+        }
+
+        for table, columns in validation_rules.items():
+            logging.info(f"Validating table {table}")
+            for column in columns:
+                # Query to count null values in each column
+                query = f"""
+                SELECT COUNT(*) AS NullCount
+                FROM `{project_id}.{dataset_id}.{table}`
+                WHERE {column} IS NULL
+                """
+                result = client.query(query).result()
+                null_count = list(result)[0]["NullCount"]
+
+                if null_count > 0:
+                    logging.warning(f"Table {table}, Column {column} has {null_count} NULL values.")
+
+        return "Data validation completed successfully.", 200
+
+    except Exception as e:
+        logging.error(f"Error during data validation: {e}")
+        return f"Error: {e}", 500
