@@ -1,0 +1,48 @@
+from google.cloud import bigquery
+import logging
+
+# Initialize BigQuery client
+client = bigquery.Client()
+
+def query_testing(request):
+    """
+    Cloud Function to test predefined BigQuery queries and log results.
+    """
+    try:
+        # Define test cases
+        test_cases = {
+            "Total Cases": {
+                "query": """
+                SELECT SUM(Cases) AS TotalCases
+                FROM `ba-882-group3.NNDSS_Dataset.Weekly_Data`
+                """,
+                "expected": 100000  # Replace with the expected total cases
+            },
+            "Disease Count": {
+                "query": """
+                SELECT COUNT(DISTINCT DiseaseID) AS DiseaseCount
+                FROM `ba-882-group3.NNDSS_Dataset.Disease`
+                """,
+                "expected": 50  # Replace with the expected number of diseases
+            }
+        }
+
+        for test_name, test_data in test_cases.items():
+            query = test_data["query"]
+            expected = test_data["expected"]
+
+            # Execute the query
+            results = client.query(query).result()
+            actual = list(results)[0][list(results.schema)[0].name]  # Get the first column value
+
+            # Compare actual result with expected result
+            if actual == expected:
+                logging.info(f"Test '{test_name}' passed. Expected: {expected}, Found: {actual}")
+            else:
+                logging.error(f"Test '{test_name}' failed. Expected: {expected}, Found: {actual}")
+
+        return "Query testing completed successfully.", 200
+
+    except Exception as e:
+        logging.error(f"Error during query testing: {e}")
+        return f"Error: {e}", 500
