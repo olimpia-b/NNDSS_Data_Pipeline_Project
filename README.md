@@ -1,13 +1,17 @@
 # NNDSS Data Pipeline Project
-Dataset link: https://data.cdc.gov/NNDSS/NNDSS-Weekly-Data/x9gk-5huc/about_data
+This is the final project for our BA882 class of Deploying Analytics Pipelines for our MSBA program at Questrom School Of Business, Boston University.
 
-1. What data feed(s) are you considering for your class project?
-Answer:
-The NNDSS Weekly Data dataset from the CDC is being considered. It provides weekly reports of notifiable diseases across the U.S., tracking infectious diseases and conditions required by law to be reported to public health authorities. This includes diseases like influenza, COVID-19, and other important conditions for public health monitoring.
+**Contributors:**
 
-2. How often do the data get updated (i.e., new records are available and need to be added to your data warehouse)?
-Answer:
-The dataset is updated weekly. Each week, new records on disease counts and reports are added to the dataset, which will need to be ingested into the data warehouse to keep the analysis current. Weekly updates allow for near real-time tracking of public health trends.
+* Saachi Dholakia
+* Yiming Wang
+* Olimpia Borgohain
+* Xiang Liu
+
+**Dataset source:**
+Link: https://data.cdc.gov/NNDSS/NNDSS-Weekly-Data/x9gk-5huc/about_data
+NNDSS stands for the National Notifiable Diseases Surveillance System (NNDSS), it is a public health surveillance system run by the Center for Disease Control and Prevention (CDC).It provides weekly reports of notifiable diseases across the U.S., tracking infectious diseases and conditions required by law to be reported to public health authorities. This includes diseases like influenza, COVID-19, and other important conditions for public health monitoring. NNDSS data helps detect disease outbreaks, monitor trends, and guide public health responses, and it plays a crucial role in controlling epidemics and preparing for emerging health threats.
+The dataset is updated weekly. Each week, new records on disease counts and reports are added to the dataset, which is ingested into the data warehouse to keep the analysis current. Weekly updates allow for near real-time tracking of public health trends.
 
 3. Why are you interested in exploring these data feed(s) for your project?
 Answer:
