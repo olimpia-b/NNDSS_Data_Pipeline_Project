@@ -33,12 +33,13 @@ We have done and divided the project in three phases:<br>
 **3rd and final phase:**<br>
 Interactive chatbot that provides insights into specific diseases and its trends from the NNDSS dataset.
 <br>
+
 These are  the steps we followed to create our interactive chatbot:
 1. Data Preprocessing
 2. Selecting an LLM and Integration Tools
 3. Deployment
 4. Testing
-<br>
+   
 Link to the chatbot: https://chatbot-64r1objhd8f.streamlit.app/
 
 
