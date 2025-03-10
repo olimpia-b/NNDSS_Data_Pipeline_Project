@@ -30,7 +30,7 @@ We have done and divided the project in three phases:<br>
 2. In-depth trend analysis to identify patterns and anomalies in disease reporting
 3. Applied clustering algorithms for anomaly detection
    
-**3rd and final phase:**<br>
+**3rd and final phase:** <br>
 Interactive chatbot that provides insights into specific diseases and its trends from the NNDSS dataset.
 <br>
 
@@ -41,7 +41,3 @@ These are  the steps we followed to create our interactive chatbot:
 4. Testing
    
 Link to the chatbot: https://chatbot-64r1objhd8f.streamlit.app/
-
-
-
-
